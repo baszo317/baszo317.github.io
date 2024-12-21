@@ -44,6 +44,15 @@
     #product-error-msg, #user-error-msg {
       color: red;
     }
+
+    .loading {
+      text-align: center;
+      margin: 20px;
+    }
+
+    button {
+      cursor: pointer;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
   <script>
@@ -102,7 +111,7 @@
     // 渲染商品列表
     async function renderProductList() {
       const productsDiv = document.getElementById('products');
-      productsDiv.innerHTML = '';
+      productsDiv.innerHTML = '<div class="loading">載入中...</div>';
 
       try {
         const { data: products, error } = await supabase.from('products').select('*');
@@ -113,6 +122,7 @@
           return;
         }
 
+        productsDiv.innerHTML = '';
         products.forEach(product => {
           const productDiv = document.createElement('div');
           productDiv.className = 'product';
@@ -168,7 +178,7 @@
     // 渲染使用者列表
     async function renderUserList() {
       const userList = document.getElementById('user-list');
-      userList.innerHTML = '';
+      userList.innerHTML = '<div class="loading">載入中...</div>';
 
       try {
         const { data: users, error } = await supabase.from('users').select('*');
@@ -179,6 +189,7 @@
           return;
         }
 
+        userList.innerHTML = '';
         users.forEach(user => {
           const userItem = document.createElement('li');
           userItem.className = 'user-item';
@@ -242,7 +253,7 @@
     // 更新購物車展示
     async function updateCartDisplay(username) {
       const cartContainer = document.getElementById('cart-container');
-      cartContainer.innerHTML = '';
+      cartContainer.innerHTML = '<div class="loading">載入中...</div>';
 
       const user = await supabase.from('users').select('id').eq('username', username).single();
       if (!user.data) return;
@@ -256,6 +267,7 @@
           return;
         }
 
+        cartContainer.innerHTML = '';
         cartItems.forEach(item => {
           const itemDiv = document.createElement('div');
           itemDiv.className = 'product';
