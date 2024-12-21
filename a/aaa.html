@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>簡易購物平台</title>
   <style>
-    /* CSS 部分 */
     body {
       font-family: Arial, sans-serif;
       display: flex;
@@ -13,7 +12,7 @@
       align-items: center;
     }
 
-    #product-section, #checkout-section {
+    #product-section, #user-section, #checkout-section {
       margin: 20px;
       padding: 20px;
       border: 1px solid #ccc;
@@ -23,10 +22,27 @@
     .product {
       margin-bottom: 15px;
     }
+
+    .cart {
+      display: none;
+    }
+
+    .cart.active {
+      display: block;
+    }
+
+    .user-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .user-item button {
+      margin-left: 5px;
+    }
   </style>
 </head>
 <body>
-  <!-- HTML 部分 -->
   <h1>線上購物平台</h1>
 
   <div id="product-section">
@@ -40,18 +56,33 @@
     <div id="products"></div>
   </div>
 
+  <div id="user-section">
+    <h2>使用者列表</h2>
+    <input type="text" id="new-username" placeholder="新增使用者">
+    <button onclick="addUser()">新增使用者</button>
+    <p id="user-error-msg" style="color: red;"></p>
+    <ul id="user-list"></ul>
+  </div>
+
   <div id="checkout-section">
-    <h2>使用者購買區</h2>
-    <input type="text" id="username" placeholder="使用者名稱">
-    <div id="cart-items"></div>
-    <p id="cart-total">總金額: $0</p>
-    <button onclick="checkout()">結算</button>
+    <h2>購物車</h2>
+    <div id="cart-container"></div>
   </div>
 
   <script>
-    // JavaScript 部分
-    let products = [];
-    let users = {};
+    let products = JSON.parse(localStorage.getItem('products')) || [];
+    let users = JSON.parse(localStorage.getItem('users')) || {};
+    let currentUser = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderProductList();
+      renderUserList();
+    });
+
+    function saveToLocalStorage() {
+      localStorage.setItem('products', JSON.stringify(products));
+      localStorage.setItem('users', JSON.stringify(users));
+    }
 
     function addProduct() {
       const name = document.getElementById('product-name').value;
@@ -65,28 +96,119 @@
 
       errorMsg.textContent = "";
       products.push({ name, price });
-
-      const productDiv = document.createElement('div');
-      productDiv.className = 'product';
-      productDiv.innerHTML = `<p>${name} - $${price.toFixed(2)}</p><button onclick="addToCart('${name}', ${price})">加入購物車</button>`;
-      document.getElementById('products').appendChild(productDiv);
+      saveToLocalStorage();
+      renderProductList();
 
       document.getElementById('product-name').value = "";
       document.getElementById('product-price').value = "";
     }
 
-    function addToCart(name, price) {
-      const username = document.getElementById('username').value;
+    function renderProductList() {
+      const productsDiv = document.getElementById('products');
+      productsDiv.innerHTML = '';
+
+      products.forEach((product, index) => {
+        const productDiv = document.createElement('div');
+        productDiv.className = 'product';
+        productDiv.innerHTML = `
+          <p>${product.name} - $${product.price.toFixed(2)}</p>
+          <button onclick="addToCart('${product.name}', ${product.price})">加入購物車</button>
+          <button onclick="deleteProduct(${index})" style="color: red;">刪除</button>
+        `;
+        productsDiv.appendChild(productDiv);
+      });
+    }
+
+    function deleteProduct(index) {
+      if (confirm(`確定要刪除商品 "${products[index].name}" 嗎？`)) {
+        products.splice(index, 1);
+        saveToLocalStorage();
+        renderProductList();
+      }
+    }
+
+    function addUser() {
+      const username = document.getElementById('new-username').value.trim();
+      const errorMsg = document.getElementById('user-error-msg');
+
       if (!username) {
-        alert("請輸入使用者名稱！");
+        errorMsg.textContent = "使用者名稱不可為空！";
         return;
       }
 
-      if (!users[username]) {
-        users[username] = { cart: [], totalAmount: 0 };
+      if (users[username]) {
+        errorMsg.textContent = "此使用者已存在！";
+        return;
       }
 
-      const userCart = users[username];
+      errorMsg.textContent = "";
+      users[username] = { cart: [], totalAmount: 0 };
+      saveToLocalStorage();
+      renderUserList();
+      document.getElementById('new-username').value = "";
+    }
+
+    function renderUserList() {
+      const userList = document.getElementById('user-list');
+      userList.innerHTML = '';
+
+      Object.keys(users).forEach(username => {
+        const userItem = document.createElement('li');
+        userItem.className = 'user-item';
+        userItem.innerHTML = `
+          <span>${username}</span>
+          <div>
+            <button onclick="selectUser('${username}')">切換</button>
+            <button onclick="deleteUser('${username}')">刪除</button>
+          </div>
+        `;
+        userList.appendChild(userItem);
+      });
+    }
+
+    function selectUser(username) {
+      currentUser = username;
+      const carts = document.querySelectorAll('.cart');
+      carts.forEach(cart => cart.classList.remove('active'));
+
+      let userCartDiv = document.getElementById(`cart-${username}`);
+      if (!userCartDiv) {
+        userCartDiv = document.createElement('div');
+        userCartDiv.id = `cart-${username}`;
+        userCartDiv.className = 'cart active';
+        document.getElementById('cart-container').appendChild(userCartDiv);
+      } else {
+        userCartDiv.classList.add('active');
+      }
+
+      updateCartDisplay(username);
+    }
+
+    function deleteUser(username) {
+      if (confirm(`確定要刪除使用者 ${username} 嗎？`)) {
+        delete users[username];
+        saveToLocalStorage();
+        renderUserList();
+
+        const userCartDiv = document.getElementById(`cart-${username}`);
+        if (userCartDiv) {
+          userCartDiv.remove();
+        }
+
+        if (currentUser === username) {
+          currentUser = null;
+          document.getElementById('cart-container').innerHTML = '';
+        }
+      }
+    }
+
+    function addToCart(name, price) {
+      if (!currentUser) {
+        alert("請先選擇使用者！");
+        return;
+      }
+
+      const userCart = users[currentUser];
       const existingItem = userCart.cart.find(item => item.name === name);
       if (existingItem) {
         existingItem.quantity += 1;
@@ -96,43 +218,38 @@
       }
 
       userCart.totalAmount += price;
-      updateCartDisplay(username);
+      saveToLocalStorage();
+      updateCartDisplay(currentUser);
     }
 
     function updateCartDisplay(username) {
       const userCart = users[username];
-      const cartItemsDiv = document.getElementById('cart-items');
-      cartItemsDiv.innerHTML = `<h3>${username} 的購物車</h3>`;
+      const userCartDiv = document.getElementById(`cart-${username}`);
+      userCartDiv.innerHTML = `<h3>${username} 的購物車</h3>`;
 
-      userCart.cart.forEach(item => {
+      userCart.cart.forEach((item, index) => {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'product';
-        itemDiv.textContent = `${item.name} x${item.quantity} - $${item.totalPrice.toFixed(2)}`;
-        cartItemsDiv.appendChild(itemDiv);
+        itemDiv.innerHTML = `
+          ${item.name} x${item.quantity} - $${item.totalPrice.toFixed(2)}
+          <button onclick="deleteFromCart('${username}', ${index})">刪除</button>
+        `;
+        userCartDiv.appendChild(itemDiv);
       });
 
-      document.getElementById('cart-total').textContent = `總金額: $${userCart.totalAmount.toFixed(2)}`;
+      const totalDiv = document.createElement('p');
+      totalDiv.textContent = `總金額: $${userCart.totalAmount.toFixed(2)}`;
+      userCartDiv.appendChild(totalDiv);
     }
 
-    function checkout() {
-      const username = document.getElementById('username').value;
-      if (!username) {
-        alert("請輸入使用者名稱！");
-        return;
-      }
-
+    function deleteFromCart(username, itemIndex) {
       const userCart = users[username];
-      if (!userCart || userCart.cart.length === 0) {
-        alert(`${username} 的購物車是空的，請選擇商品！`);
-        return;
-      }
+      const item = userCart.cart[itemIndex];
+      userCart.totalAmount -= item.totalPrice;
+      userCart.cart.splice(itemIndex, 1);
 
-      alert(`${username} 的購物車結算完成！總金額為 $${userCart.totalAmount.toFixed(2)}`);
-      userCart.cart = [];
-      userCart.totalAmount = 0;
-
-      document.getElementById('cart-items').innerHTML = "";
-      document.getElementById('cart-total').textContent = "總金額: $0";
+      saveToLocalStorage();
+      updateCartDisplay(username);
     }
   </script>
 </body>
