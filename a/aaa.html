@@ -62,19 +62,24 @@
 
     let currentUser = null;
 
-    document.addEventListener('DOMContentLoaded', () => {
-      renderProductList();
-      renderUserList();
+    // 確保Supabase已經初始化後再加載
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        await renderProductList();
+        await renderUserList();
 
-      // 即時監控數據變化
-      supabase
-        .channel('realtime-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, renderProductList)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, renderUserList)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'cart_items' }, () => {
-          if (currentUser) updateCartDisplay(currentUser);
-        })
-        .subscribe();
+        // 即時監控數據變化
+        supabase
+          .channel('realtime-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, renderProductList)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, renderUserList)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'cart_items' }, () => {
+            if (currentUser) updateCartDisplay(currentUser);
+          })
+          .subscribe();
+      } catch (err) {
+        console.error('初始化錯誤:', err);
+      }
     });
 
     // 新增商品
@@ -97,7 +102,7 @@
           console.error(error);
         } else {
           alert("商品新增成功！");
-          renderProductList();
+          await renderProductList();
         }
       } catch (err) {
         errorMsg.textContent = `新增商品時發生錯誤: ${err.message}`;
@@ -143,7 +148,7 @@
     async function deleteProduct(productId) {
       if (confirm('確定要刪除此商品嗎？')) {
         await supabase.from('products').delete().eq('id', productId);
-        renderProductList();
+        await renderProductList();
       }
     }
 
@@ -165,7 +170,7 @@
           console.error(error);
         } else {
           alert("使用者新增成功！");
-          renderUserList();
+          await renderUserList();
         }
       } catch (err) {
         errorMsg.textContent = `新增使用者時發生錯誤: ${err.message}`;
@@ -218,7 +223,7 @@
     async function deleteUser(userId) {
       if (confirm('確定要刪除此使用者嗎？')) {
         await supabase.from('users').delete().eq('id', userId);
-        renderUserList();
+        await renderUserList();
       }
     }
 
