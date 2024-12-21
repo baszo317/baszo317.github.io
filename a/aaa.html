@@ -87,6 +87,7 @@
           errorMsg.textContent = `新增商品失敗: ${error.message}`;
           console.error(error);
         } else {
+          alert("商品新增成功！");
           renderProductList();
         }
       } catch (err) {
@@ -132,6 +133,7 @@
     async function deleteProduct(productId) {
       if (confirm('確定要刪除此商品嗎？')) {
         await supabase.from('products').delete().eq('id', productId);
+        renderProductList();
       }
     }
 
@@ -152,6 +154,7 @@
           errorMsg.textContent = `新增使用者失敗: ${error.message}`;
           console.error(error);
         } else {
+          alert("使用者新增成功！");
           renderUserList();
         }
       } catch (err) {
@@ -204,6 +207,7 @@
     async function deleteUser(userId) {
       if (confirm('確定要刪除此使用者嗎？')) {
         await supabase.from('users').delete().eq('id', userId);
+        renderUserList();
       }
     }
 
@@ -217,9 +221,22 @@
       const user = await supabase.from('users').select('id').eq('username', currentUser).single();
       if (!user.data) return;
 
-      await supabase.from('cart_items').insert([
-        { user_id: user.data.id, product_id: productId, quantity: 1, total_price: productPrice }
-      ]);
+      try {
+        const { error } = await supabase.from('cart_items').insert([
+          { user_id: user.data.id, product_id: productId, quantity: 1, total_price: productPrice }
+        ]);
+
+        if (error) {
+          alert("加入購物車失敗！");
+          console.error(error);
+        } else {
+          alert("商品成功加入購物車！");
+          updateCartDisplay(currentUser);
+        }
+      } catch (err) {
+        alert("加入購物車時發生錯誤！");
+        console.error(err);
+      }
     }
 
     // 更新購物車展示
@@ -230,32 +247,39 @@
       const user = await supabase.from('users').select('id').eq('username', username).single();
       if (!user.data) return;
 
-      const { data: cartItems, error } = await supabase.from('cart_items').select('*, products(name)').eq('user_id', user.data.id);
-      if (error) {
-        cartContainer.textContent = '無法獲取購物車！';
-        console.error(error);
-        return;
+      try {
+        const { data: cartItems, error } = await supabase.from('cart_items').select('*, products(name)').eq('user_id', user.data.id);
+
+        if (error) {
+          cartContainer.textContent = '無法獲取購物車！';
+          console.error(error);
+          return;
+        }
+
+        cartItems.forEach(item => {
+          const itemDiv = document.createElement('div');
+          itemDiv.className = 'product';
+          itemDiv.innerHTML = `
+            ${item.products.name} x${item.quantity} - $${item.total_price.toFixed(2)}
+            <button onclick="deleteFromCart(${item.id})">刪除</button>
+          `;
+          cartContainer.appendChild(itemDiv);
+        });
+
+        const totalPrice = cartItems.reduce((acc, item) => acc + item.total_price, 0);
+        const totalDiv = document.createElement('p');
+        totalDiv.textContent = `總金額：$${totalPrice.toFixed(2)}`;
+        cartContainer.appendChild(totalDiv);
+      } catch (err) {
+        cartContainer.textContent = '無法更新購物車！';
+        console.error(err);
       }
-
-      cartItems.forEach(item => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'product';
-        itemDiv.innerHTML = `
-          ${item.products.name} x${item.quantity} - $${item.total_price.toFixed(2)}
-          <button onclick="deleteFromCart(${item.id})">刪除</button>
-        `;
-        cartContainer.appendChild(itemDiv);
-      });
-
-      const totalPrice = cartItems.reduce((acc, item) => acc + item.total_price, 0);
-      const totalDiv = document.createElement('p');
-      totalDiv.textContent = `總金額：$${totalPrice.toFixed(2)}`;
-      cartContainer.appendChild(totalDiv);
     }
 
     // 從購物車中移除
     async function deleteFromCart(cartItemId) {
       await supabase.from('cart_items').delete().eq('id', cartItemId);
+      if (currentUser) updateCartDisplay(currentUser);
     }
   </script>
 </head>
