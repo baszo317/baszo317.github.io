@@ -41,6 +41,178 @@
       margin-left: 5px;
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script>
+    const SUPABASE_URL = 'https://sebftfqvlzecsezcfxrq.supabase.co'; // 替換為您的 Supabase URL
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlYmZ0ZnF2bHplY3NlemNmeHJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ3NjM4MzQsImV4cCI6MjA1MDMzOTgzNH0.FdZw3Wf6gh6TdUO4mdnRIKULZ3iog3H0RS2IMMt1DHE'; // 替換為您的 Supabase 匿名金鑰
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let currentUser = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderProductList();
+      renderUserList();
+
+      // 即時監控數據變化
+      supabase
+        .channel('realtime-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, renderProductList)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, renderUserList)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cart_items' }, () => {
+          if (currentUser) updateCartDisplay(currentUser);
+        })
+        .subscribe();
+    });
+
+    // 新增商品
+    async function addProduct() {
+      const name = document.getElementById('product-name').value.trim();
+      const price = parseFloat(document.getElementById('product-price').value);
+      const errorMsg = document.getElementById('product-error-msg');
+
+      if (!name || isNaN(price) || price <= 0) {
+        errorMsg.textContent = '請輸入有效的商品名稱和價格！';
+        return;
+      }
+
+      errorMsg.textContent = '';
+      await supabase.from('products').insert([{ name, price }]);
+      document.getElementById('product-name').value = '';
+      document.getElementById('product-price').value = '';
+    }
+
+    // 渲染商品列表
+    async function renderProductList() {
+      const productsDiv = document.getElementById('products');
+      productsDiv.innerHTML = '';
+
+      const { data: products, error } = await supabase.from('products').select('*');
+      if (error) {
+        productsDiv.textContent = '無法獲取商品列表！';
+        return;
+      }
+
+      products.forEach(product => {
+        const productDiv = document.createElement('div');
+        productDiv.className = 'product';
+        productDiv.innerHTML = `
+          <p>${product.name} - $${product.price.toFixed(2)}</p>
+          <button onclick="addToCart(${product.id}, ${product.price})">加入購物車</button>
+          <button onclick="deleteProduct(${product.id})" style="color: red;">刪除</button>
+        `;
+        productsDiv.appendChild(productDiv);
+      });
+    }
+
+    // 刪除商品
+    async function deleteProduct(productId) {
+      if (confirm('確定要刪除此商品嗎？')) {
+        await supabase.from('products').delete().eq('id', productId);
+      }
+    }
+
+    // 新增使用者
+    async function addUser() {
+      const username = document.getElementById('new-username').value.trim();
+      const errorMsg = document.getElementById('user-error-msg');
+
+      if (!username) {
+        errorMsg.textContent = '使用者名稱不可為空！';
+        return;
+      }
+
+      await supabase.from('users').insert([{ username }]);
+      document.getElementById('new-username').value = '';
+    }
+
+    // 渲染使用者列表
+    async function renderUserList() {
+      const userList = document.getElementById('user-list');
+      userList.innerHTML = '';
+
+      const { data: users, error } = await supabase.from('users').select('*');
+      if (error) {
+        userList.textContent = '無法獲取使用者列表！';
+        return;
+      }
+
+      users.forEach(user => {
+        const userItem = document.createElement('li');
+        userItem.className = 'user-item';
+        userItem.innerHTML = `
+          <span>${user.username}</span>
+          <div>
+            <button onclick="selectUser('${user.username}')">切換</button>
+            <button onclick="deleteUser(${user.id})">刪除</button>
+          </div>
+        `;
+        userList.appendChild(userItem);
+      });
+    }
+
+    // 選擇當前使用者
+    function selectUser(username) {
+      currentUser = username;
+      updateCartDisplay(username);
+    }
+
+    // 刪除使用者
+    async function deleteUser(userId) {
+      if (confirm('確定要刪除此使用者嗎？')) {
+        await supabase.from('users').delete().eq('id', userId);
+      }
+    }
+
+    // 加入購物車
+    async function addToCart(productId, productPrice) {
+      if (!currentUser) {
+        alert('請先選擇使用者！');
+        return;
+      }
+
+      const user = await supabase.from('users').select('id').eq('username', currentUser).single();
+      if (!user.data) return;
+
+      await supabase.from('cart_items').insert([
+        { user_id: user.data.id, product_id: productId, quantity: 1, total_price: productPrice }
+      ]);
+    }
+
+    // 更新購物車展示
+    async function updateCartDisplay(username) {
+      const cartContainer = document.getElementById('cart-container');
+      cartContainer.innerHTML = '';
+
+      const user = await supabase.from('users').select('id').eq('username', username).single();
+      if (!user.data) return;
+
+      const { data: cartItems, error } = await supabase.from('cart_items').select('*, products(name)').eq('user_id', user.data.id);
+      if (error) {
+        cartContainer.textContent = '無法獲取購物車！';
+        return;
+      }
+
+      cartItems.forEach(item => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'product';
+        itemDiv.innerHTML = `
+          ${item.products.name} x${item.quantity} - $${item.total_price.toFixed(2)}
+          <button onclick="deleteFromCart(${item.id})">刪除</button>
+        `;
+        cartContainer.appendChild(itemDiv);
+      });
+
+      const totalPrice = cartItems.reduce((acc, item) => acc + item.total_price, 0);
+      const totalDiv = document.createElement('p');
+      totalDiv.textContent = `總金額：$${totalPrice.toFixed(2)}`;
+      cartContainer.appendChild(totalDiv);
+    }
+
+    // 從購物車中移除
+    async function deleteFromCart(cartItemId) {
+      await supabase.from('cart_items').delete().eq('id', cartItemId);
+    }
+  </script>
 </head>
 <body>
   <h1>線上購物平台</h1>
@@ -68,189 +240,5 @@
     <h2>購物車</h2>
     <div id="cart-container"></div>
   </div>
-
-  <script>
-    let products = JSON.parse(localStorage.getItem('products')) || [];
-    let users = JSON.parse(localStorage.getItem('users')) || {};
-    let currentUser = null;
-
-    document.addEventListener('DOMContentLoaded', () => {
-      renderProductList();
-      renderUserList();
-    });
-
-    function saveToLocalStorage() {
-      localStorage.setItem('products', JSON.stringify(products));
-      localStorage.setItem('users', JSON.stringify(users));
-    }
-
-    function addProduct() {
-      const name = document.getElementById('product-name').value;
-      const price = parseFloat(document.getElementById('product-price').value);
-      const errorMsg = document.getElementById('product-error-msg');
-
-      if (!name || isNaN(price) || price <= 0) {
-        errorMsg.textContent = "請輸入有效的商品名稱和價格！";
-        return;
-      }
-
-      errorMsg.textContent = "";
-      products.push({ name, price });
-      saveToLocalStorage();
-      renderProductList();
-
-      document.getElementById('product-name').value = "";
-      document.getElementById('product-price').value = "";
-    }
-
-    function renderProductList() {
-      const productsDiv = document.getElementById('products');
-      productsDiv.innerHTML = '';
-
-      products.forEach((product, index) => {
-        const productDiv = document.createElement('div');
-        productDiv.className = 'product';
-        productDiv.innerHTML = `
-          <p>${product.name} - $${product.price.toFixed(2)}</p>
-          <button onclick="addToCart('${product.name}', ${product.price})">加入購物車</button>
-          <button onclick="deleteProduct(${index})" style="color: red;">刪除</button>
-        `;
-        productsDiv.appendChild(productDiv);
-      });
-    }
-
-    function deleteProduct(index) {
-      if (confirm(`確定要刪除商品 "${products[index].name}" 嗎？`)) {
-        products.splice(index, 1);
-        saveToLocalStorage();
-        renderProductList();
-      }
-    }
-
-    function addUser() {
-      const username = document.getElementById('new-username').value.trim();
-      const errorMsg = document.getElementById('user-error-msg');
-
-      if (!username) {
-        errorMsg.textContent = "使用者名稱不可為空！";
-        return;
-      }
-
-      if (users[username]) {
-        errorMsg.textContent = "此使用者已存在！";
-        return;
-      }
-
-      errorMsg.textContent = "";
-      users[username] = { cart: [], totalAmount: 0 };
-      saveToLocalStorage();
-      renderUserList();
-      document.getElementById('new-username').value = "";
-    }
-
-    function renderUserList() {
-      const userList = document.getElementById('user-list');
-      userList.innerHTML = '';
-
-      Object.keys(users).forEach(username => {
-        const userItem = document.createElement('li');
-        userItem.className = 'user-item';
-        userItem.innerHTML = `
-          <span>${username}</span>
-          <div>
-            <button onclick="selectUser('${username}')">切換</button>
-            <button onclick="deleteUser('${username}')">刪除</button>
-          </div>
-        `;
-        userList.appendChild(userItem);
-      });
-    }
-
-    function selectUser(username) {
-      currentUser = username;
-      const carts = document.querySelectorAll('.cart');
-      carts.forEach(cart => cart.classList.remove('active'));
-
-      let userCartDiv = document.getElementById(`cart-${username}`);
-      if (!userCartDiv) {
-        userCartDiv = document.createElement('div');
-        userCartDiv.id = `cart-${username}`;
-        userCartDiv.className = 'cart active';
-        document.getElementById('cart-container').appendChild(userCartDiv);
-      } else {
-        userCartDiv.classList.add('active');
-      }
-
-      updateCartDisplay(username);
-    }
-
-    function deleteUser(username) {
-      if (confirm(`確定要刪除使用者 ${username} 嗎？`)) {
-        delete users[username];
-        saveToLocalStorage();
-        renderUserList();
-
-        const userCartDiv = document.getElementById(`cart-${username}`);
-        if (userCartDiv) {
-          userCartDiv.remove();
-        }
-
-        if (currentUser === username) {
-          currentUser = null;
-          document.getElementById('cart-container').innerHTML = '';
-        }
-      }
-    }
-
-    function addToCart(name, price) {
-      if (!currentUser) {
-        alert("請先選擇使用者！");
-        return;
-      }
-
-      const userCart = users[currentUser];
-      const existingItem = userCart.cart.find(item => item.name === name);
-      if (existingItem) {
-        existingItem.quantity += 1;
-        existingItem.totalPrice += price;
-      } else {
-        userCart.cart.push({ name, quantity: 1, totalPrice: price });
-      }
-
-      userCart.totalAmount += price;
-      saveToLocalStorage();
-      updateCartDisplay(currentUser);
-    }
-
-    function updateCartDisplay(username) {
-      const userCart = users[username];
-      const userCartDiv = document.getElementById(`cart-${username}`);
-      userCartDiv.innerHTML = `<h3>${username} 的購物車</h3>`;
-
-      userCart.cart.forEach((item, index) => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'product';
-        itemDiv.innerHTML = `
-          ${item.name} x${item.quantity} - $${item.totalPrice.toFixed(2)}
-          <button onclick="deleteFromCart('${username}', ${index})">刪除</button>
-        `;
-        userCartDiv.appendChild(itemDiv);
-      });
-
-      const totalDiv = document.createElement('p');
-      totalDiv.textContent = `總金額: $${userCart.totalAmount.toFixed(2)}`;
-      userCartDiv.appendChild(totalDiv);
-    }
-
-    function deleteFromCart(username, itemIndex) {
-      const userCart = users[username];
-      const item = userCart.cart[itemIndex];
-      userCart.totalAmount -= item.totalPrice;
-      userCart.cart.splice(itemIndex, 1);
-
-      saveToLocalStorage();
-      updateCartDisplay(username);
-    }
-  </script>
 </body>
 </html>
