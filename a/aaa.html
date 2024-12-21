@@ -40,6 +40,10 @@
     .user-item button {
       margin-left: 5px;
     }
+
+    #product-error-msg, #user-error-msg {
+      color: red;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
   <script>
@@ -75,8 +79,21 @@
         return;
       }
 
-      errorMsg.textContent = '';
-      await supabase.from('products').insert([{ name, price }]);
+      try {
+        errorMsg.textContent = '';
+        const { data, error } = await supabase.from('products').insert([{ name, price }]);
+
+        if (error) {
+          errorMsg.textContent = `新增商品失敗: ${error.message}`;
+          console.error(error);
+        } else {
+          renderProductList();
+        }
+      } catch (err) {
+        errorMsg.textContent = `新增商品時發生錯誤: ${err.message}`;
+        console.error(err);
+      }
+
       document.getElementById('product-name').value = '';
       document.getElementById('product-price').value = '';
     }
@@ -86,22 +103,29 @@
       const productsDiv = document.getElementById('products');
       productsDiv.innerHTML = '';
 
-      const { data: products, error } = await supabase.from('products').select('*');
-      if (error) {
-        productsDiv.textContent = '無法獲取商品列表！';
-        return;
-      }
+      try {
+        const { data: products, error } = await supabase.from('products').select('*');
 
-      products.forEach(product => {
-        const productDiv = document.createElement('div');
-        productDiv.className = 'product';
-        productDiv.innerHTML = `
-          <p>${product.name} - $${product.price.toFixed(2)}</p>
-          <button onclick="addToCart(${product.id}, ${product.price})">加入購物車</button>
-          <button onclick="deleteProduct(${product.id})" style="color: red;">刪除</button>
-        `;
-        productsDiv.appendChild(productDiv);
-      });
+        if (error) {
+          productsDiv.textContent = `無法獲取商品列表: ${error.message}`;
+          console.error(error);
+          return;
+        }
+
+        products.forEach(product => {
+          const productDiv = document.createElement('div');
+          productDiv.className = 'product';
+          productDiv.innerHTML = `
+            <p>${product.name} - $${product.price.toFixed(2)}</p>
+            <button onclick="addToCart(${product.id}, ${product.price})">加入購物車</button>
+            <button onclick="deleteProduct(${product.id})" style="color: red;">刪除</button>
+          `;
+          productsDiv.appendChild(productDiv);
+        });
+      } catch (err) {
+        productsDiv.textContent = '無法獲取商品列表！';
+        console.error(err);
+      }
     }
 
     // 刪除商品
@@ -121,7 +145,20 @@
         return;
       }
 
-      await supabase.from('users').insert([{ username }]);
+      try {
+        const { data, error } = await supabase.from('users').insert([{ username }]);
+
+        if (error) {
+          errorMsg.textContent = `新增使用者失敗: ${error.message}`;
+          console.error(error);
+        } else {
+          renderUserList();
+        }
+      } catch (err) {
+        errorMsg.textContent = `新增使用者時發生錯誤: ${err.message}`;
+        console.error(err);
+      }
+
       document.getElementById('new-username').value = '';
     }
 
@@ -130,24 +167,31 @@
       const userList = document.getElementById('user-list');
       userList.innerHTML = '';
 
-      const { data: users, error } = await supabase.from('users').select('*');
-      if (error) {
-        userList.textContent = '無法獲取使用者列表！';
-        return;
-      }
+      try {
+        const { data: users, error } = await supabase.from('users').select('*');
 
-      users.forEach(user => {
-        const userItem = document.createElement('li');
-        userItem.className = 'user-item';
-        userItem.innerHTML = `
-          <span>${user.username}</span>
-          <div>
-            <button onclick="selectUser('${user.username}')">切換</button>
-            <button onclick="deleteUser(${user.id})">刪除</button>
-          </div>
-        `;
-        userList.appendChild(userItem);
-      });
+        if (error) {
+          userList.textContent = `無法獲取使用者列表: ${error.message}`;
+          console.error(error);
+          return;
+        }
+
+        users.forEach(user => {
+          const userItem = document.createElement('li');
+          userItem.className = 'user-item';
+          userItem.innerHTML = `
+            <span>${user.username}</span>
+            <div>
+              <button onclick="selectUser('${user.username}')">切換</button>
+              <button onclick="deleteUser(${user.id})">刪除</button>
+            </div>
+          `;
+          userList.appendChild(userItem);
+        });
+      } catch (err) {
+        userList.textContent = '無法獲取使用者列表！';
+        console.error(err);
+      }
     }
 
     // 選擇當前使用者
@@ -189,6 +233,7 @@
       const { data: cartItems, error } = await supabase.from('cart_items').select('*, products(name)').eq('user_id', user.data.id);
       if (error) {
         cartContainer.textContent = '無法獲取購物車！';
+        console.error(error);
         return;
       }
 
@@ -222,7 +267,7 @@
     <input type="text" id="product-name" placeholder="商品名稱">
     <input type="number" id="product-price" placeholder="價格" min="0">
     <button onclick="addProduct()">新增商品</button>
-    <p id="product-error-msg" style="color: red;"></p>
+    <p id="product-error-msg"></p>
 
     <h2>商品列表</h2>
     <div id="products"></div>
@@ -232,7 +277,7 @@
     <h2>使用者列表</h2>
     <input type="text" id="new-username" placeholder="新增使用者">
     <button onclick="addUser()">新增使用者</button>
-    <p id="user-error-msg" style="color: red;"></p>
+    <p id="user-error-msg"></p>
     <ul id="user-list"></ul>
   </div>
 
